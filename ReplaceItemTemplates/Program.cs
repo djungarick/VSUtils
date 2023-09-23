@@ -1,31 +1,18 @@
 ﻿using System.Runtime.InteropServices;
 using System.Text;
 
-const string ClassTemplate = """
-    namespace $rootnamespace$;
+string classTemplate = File.ReadAllText("Templates/Class.cs");
+byte[] classTemplateBytes = Encoding.UTF8.GetBytes(classTemplate);
 
-    internal sealed class $safeitemrootname$
-    {
-        
-    }
-
-    """;
-const string InterfaceTemplate = """
-    namespace $rootnamespace$;
-
-    public interface $safeitemrootname$
-    {
-        
-    }
-
-    """;
+string interfaceTemplate = File.ReadAllText("Templates/Interface.cs");
+byte[] interfaceTemplateBytes = Encoding.UTF8.GetBytes(interfaceTemplate);
 
 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
     ContinueUnderWindows();
 else
     throw new NotSupportedException("Only OS 'Windows' is supported currently.");
 
-static void ContinueUnderWindows()
+void ContinueUnderWindows()
 {
     const string BasePathTemplate = @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\{0}\Code\1033";
     string[] folders = { "AspNetCore", "CSharp" };
@@ -37,12 +24,12 @@ static void ContinueUnderWindows()
     {
         using (FileStream classFileStream = File.Open(string.Format(classPathTemplate, folder), FileMode.Truncate, FileAccess.Write))
         {
-            classFileStream.Write(Encoding.UTF8.GetBytes(ClassTemplate));
+            classFileStream.Write(classTemplateBytes);
         }
 
         using (FileStream interfaceFileStream = File.Open(string.Format(interfacePathTemplate, folder), FileMode.Truncate, FileAccess.Write))
         {
-            interfaceFileStream.Write(Encoding.UTF8.GetBytes(InterfaceTemplate));
+            interfaceFileStream.Write(interfaceTemplateBytes);
         }
     }
 }
