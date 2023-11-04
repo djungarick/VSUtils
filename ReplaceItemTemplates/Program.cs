@@ -14,22 +14,28 @@ else
 
 void ContinueUnderWindows()
 {
-    const string BasePathTemplate = @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\{0}\Code\1033";
-    string[] folders = { "AspNetCore", "CSharp" };
-
-    string classPathTemplate = Path.Combine(BasePathTemplate, "Class", "Class.cs");
-    string interfacePathTemplate = Path.Combine(BasePathTemplate, "Interface", "Interface.cs");
-
-    foreach (string folder in folders)
+    string[] interfacePaths =
     {
-        using (FileStream classFileStream = File.Open(string.Format(classPathTemplate, folder), FileMode.Truncate, FileAccess.Write))
-        {
-            classFileStream.Write(classTemplateBytes);
-        }
+        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\AspNetCore\Code\1033\Interface\Interface.cs",
+        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1033\Interface\Interface.cs",
+        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1049\Interface\Interface.cs"
+    };
+    string[] classPaths =
+    {
+        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\AspNetCore\Code\1033\Class\Class.cs",
+        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1033\Class\Class.cs",
+        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1049\Class\Class.cs"
+    };
 
-        using (FileStream interfaceFileStream = File.Open(string.Format(interfacePathTemplate, folder), FileMode.Truncate, FileAccess.Write))
-        {
-            interfaceFileStream.Write(interfaceTemplateBytes);
-        }
+    foreach (string classPath in classPaths)
+    {
+        using FileStream classFileStream = File.Open(classPath, FileMode.Truncate, FileAccess.Write);
+        classFileStream.Write(classTemplateBytes);
+    }
+
+    foreach (string interfacePath in interfacePaths)
+    {
+        using FileStream classFileStream = File.Open(interfacePath, FileMode.Truncate, FileAccess.Write);
+        classFileStream.Write(interfaceTemplateBytes);
     }
 }
