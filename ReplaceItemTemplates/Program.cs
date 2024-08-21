@@ -1,93 +1,139 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using ReplaceItemTemplates;
 
-const string MessageReplaced = "REPLACED";
-const string MessageNotFound = "NOT FOUND";
+const string TemplatesFolder = "Templates";
 
 const int SpaceLength = 1;
 
-string classTemplate = File.ReadAllText("Templates/Class.cs");
-byte[] classTemplateBytes = Encoding.UTF8.GetBytes(classTemplate);
+IConfigurationBuilder configurationBuilder = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", true, true);
 
-string interfaceTemplate = File.ReadAllText("Templates/Interface.cs");
-byte[] interfaceTemplateBytes = Encoding.UTF8.GetBytes(interfaceTemplate);
+IConfiguration configuration = configurationBuilder.Build();
 
-if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-    ContinueUnderWindows();
-else
-    throw new NotSupportedException("Only OS 'Windows' is supported currently.");
+IConfigurationSection filesToReplaceSettingsConfigurationSection = configuration.GetSection(nameof(FilesToReplaceSettings));
+if (!filesToReplaceSettingsConfigurationSection.Exists())
+{
+    Console.WriteLine($"The '{nameof(FilesToReplaceSettings)}' configuration section was not found.");
+    _ = Console.ReadKey();
 
-static void WriteReplacedSuccessfully()
+    return;
+}
+
+IServiceCollection serviceCollection = new ServiceCollection();
+
+serviceCollection.AddOptions<FilesToReplaceSettings>()
+    .Bind(filesToReplaceSettingsConfigurationSection)
+    .ValidateDataAnnotations();
+
+ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
+
+IOptions<FilesToReplaceSettings> fileToReplaceOptions = serviceProvider.GetRequiredService<IOptions<FilesToReplaceSettings>>();
+FileToReplace[] filesToReplace;
+
+try
+{
+    filesToReplace = fileToReplaceOptions.Value.List;
+}
+catch (OptionsValidationException ex)
+{
+    WriteErrorMessage(ex.Message);
+    _ = Console.ReadKey();
+
+    return;
+}
+
+int maxPathLength = filesToReplace.Max(static fileToReplace => fileToReplace.Path.Length);
+int maxMessageLength = typeof(Messages)
+    .GetFields(BindingFlags.Public | BindingFlags.Static)
+    .Where(static fieldInfo => fieldInfo.IsLiteral && !fieldInfo.IsInitOnly)
+    .Select(static fieldInfo => fieldInfo.GetValue(null) as string)
+    .Where(static fieldValue => fieldValue is not null)
+    .Max(static fieldValue => fieldValue!.Length);
+
+Console.WindowWidth = maxPathLength + SpaceLength + maxMessageLength;
+
+foreach (IGrouping<string, FileToReplace> filesToReplaceGroupedByTemplate in filesToReplace.GroupBy(
+    static fileToReplace => fileToReplace.Template))
+{
+    WriteTemplateName(filesToReplaceGroupedByTemplate.Key);
+
+    string templateName = Path.Combine(TemplatesFolder, filesToReplaceGroupedByTemplate.Key);
+    if (!File.Exists(templateName))
+    {
+        WriteErrorMessage("TEMPLATE NOT FOUND");
+
+        continue;
+    }
+
+    string templateContent = File.ReadAllText(templateName, Encoding.UTF8);
+
+    foreach (FileToReplace fileToReplace in filesToReplaceGroupedByTemplate)
+    {
+        Console.Write(fileToReplace.Path);
+        Console.SetCursorPosition(maxPathLength + SpaceLength, Console.CursorTop);
+
+        if (!File.Exists(fileToReplace.Path))
+        {
+            WriteNotFound();
+
+            continue;
+        }
+
+        if (File.ReadAllText(fileToReplace.Path, Encoding.UTF8) == templateContent)
+        {
+            WriteAlreadyReplaced();
+
+            continue;
+        }
+
+        using (StreamWriter fileStream = new(File.Open(fileToReplace.Path, FileMode.Truncate, FileAccess.Write)))
+        {
+            fileStream.Write(templateContent);
+        }
+
+        WriteReplaced();
+    }
+}
+
+_ = Console.ReadKey();
+
+static void WriteReplaced()
 {
     Console.ForegroundColor = ConsoleColor.Green;
-    Console.WriteLine(MessageReplaced);
+    Console.WriteLine(Messages.Replaced);
     Console.ResetColor();
 }
 
 static void WriteNotFound()
 {
     Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine(MessageNotFound);
+    Console.WriteLine(Messages.NotFound);
     Console.ResetColor();
 }
 
-void ContinueUnderWindows()
+static void WriteAlreadyReplaced()
 {
-    string[] interfacePaths =
-    [
-        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\AspNetCore\Code\1033\Interface\Interface.cs",
-        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1033\Interface\Interface.cs",
-        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1049\Interface\Interface.cs"
-    ];
-    string[] classPaths =
-    [
-        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\AspNetCore\Code\1033\Class\Class.cs",
-        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1033\Class\Class.cs",
-        @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\ItemTemplates\CSharp\Code\1049\Class\Class.cs"
-    ];
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.WriteLine(Messages.AlreadyReplaced);
+    Console.ResetColor();
+}
 
-    int maxPathLength = new string[][] { interfacePaths, classPaths }
-        .SelectMany(static _ => _.Select(static _ => _.Length))
-        .Max();
-    int maxMessageLength = new string[] { MessageReplaced, MessageNotFound }
-        .Select(static _ => _.Length)
-        .Max();
+static void WriteTemplateName(string templateName)
+{
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.Write(templateName);
+    Console.WriteLine(':');
+    Console.ResetColor();
+}
 
-    Console.WindowWidth = maxPathLength + SpaceLength + maxMessageLength;
-
-    foreach (string classPath in classPaths)
-    {
-        Console.Write(classPath);
-        Console.SetCursorPosition(maxPathLength + SpaceLength, Console.CursorTop);
-
-        if (File.Exists(classPath))
-        {
-            using FileStream classFileStream = File.Open(classPath, FileMode.Truncate, FileAccess.Write);
-            classFileStream.Write(classTemplateBytes);
-
-            WriteReplacedSuccessfully();
-        }
-        else
-        {
-            WriteNotFound();
-        }
-    }
-
-    foreach (string interfacePath in interfacePaths)
-    {
-        Console.Write(interfacePath);
-        Console.SetCursorPosition(maxPathLength + SpaceLength, Console.CursorTop);
-
-        if (File.Exists(interfacePath))
-        {
-            using FileStream classFileStream = File.Open(interfacePath, FileMode.Truncate, FileAccess.Write);
-            classFileStream.Write(interfaceTemplateBytes);
-
-            WriteReplacedSuccessfully();
-        }
-        else
-        {
-            WriteNotFound();
-        }
-    }
+static void WriteErrorMessage(string errorMessage)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine(errorMessage);
+    Console.ResetColor();
 }
